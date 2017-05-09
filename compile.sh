@@ -24,13 +24,14 @@ function play_command() {
   if type activator 2>/dev/null; then
     activator "$@"
   else
-    play "$@"
+    #play "$@"
+    /home/rajec/sandbox/play-2.2.6/play "$@"
   fi
 }
 
 # Default configurations
-HADOOP_VERSION="2.3.0"
-SPARK_VERSION="1.4.0"
+HADOOP_VERSION="2.7.1"
+SPARK_VERSION="1.6.0"
 
 # User should pass an optional argument which is a path to config file
 if [ -z "$1" ];
@@ -126,7 +127,8 @@ app_conf=${project_root}/app-conf
 rm -rf ${project_root}/dist
 mkdir dist
 
-play_command $OPTS clean test compile dist
+#play_command $OPTS  -Dsbt.parser.simple=true  clean test compile dist
+play_command $OPTS  -Dsbt.parser.simple=true  clean compile dist
 
 cd target/universal
 
