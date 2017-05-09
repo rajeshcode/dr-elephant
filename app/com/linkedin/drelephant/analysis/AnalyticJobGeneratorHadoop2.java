@@ -42,10 +42,14 @@ import org.codehaus.jackson.map.ObjectMapper;
  */
 public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private static final Logger logger = Logger.getLogger(AnalyticJobGeneratorHadoop2.class);
-  private static final String RESOURCE_MANAGER_ADDRESS = "yarn.resourcemanager.webapp.address";
+  private static final String RESOURCE_MANAGER_HTTP_POLICY = "yarn.http.policy";
+  //private static final String RESOURCE_MANAGER_ADDRESS = "yarn.resourcemanager.webapp.address";
+  private static final String RESOURCE_MANAGER_HTTP_ADDRESS = "yarn.resourcemanager.webapp.address";
+  private static final String RESOURCE_MANAGER_HTTPS_ADDRESS = "yarn.resourcemanager.webapp.https.address";
   private static final String IS_RM_HA_ENABLED = "yarn.resourcemanager.ha.enabled";
   private static final String RESOURCE_MANAGER_IDS = "yarn.resourcemanager.ha.rm-ids";
-  private static final String RM_NODE_STATE_URL = "http://%s/ws/v1/cluster/info";
+  /** private static final String RM_NODE_STATE_URL = "http://%s/ws/v1/cluster/info"; */
+  private static final String RM_NODE_STATE_URL = "%s/ws/v1/cluster/info";
   private static final String FETCH_INITIAL_WINDOW_MS = "drelephant.analysis.fetch.initial.windowMillis";
 
   private static Configuration configuration;
@@ -70,6 +74,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private final Queue<AnalyticJob> _retryQueue = new ConcurrentLinkedQueue<AnalyticJob>();
 
   public void updateResourceManagerAddresses() {
+  String resourceManagerHttpPolicy = configuration.get(RESOURCE_MANAGER_HTTP_POLICY);
     if (Boolean.valueOf(configuration.get(IS_RM_HA_ENABLED))) {
       String resourceManagers = configuration.get(RESOURCE_MANAGER_IDS);
       if (resourceManagers != null) {
@@ -79,7 +84,13 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         updateAuthToken();
         for (String id : ids) {
           try {
-            String resourceManager = configuration.get(RESOURCE_MANAGER_ADDRESS + "." + id);
+            //String resourceManager = configuration.get(RESOURCE_MANAGER_ADDRESS + "." + id);
+            String resourceManager;
+            if (resourceManagerHttpPolicy.equals("HTTPS_ONLY")){
+               resourceManager = "https://" + configuration.get(RESOURCE_MANAGER_HTTPS_ADDRESS + "." + id);
+            } else {
+               resourceManager = "http://" + configuration.get(RESOURCE_MANAGER_HTTP_ADDRESS + "." + id);
+            }
             String resourceManagerURL = String.format(RM_NODE_STATE_URL, resourceManager);
             logger.info("Checking RM URL: " + resourceManagerURL);
             JsonNode rootNode = readJsonNode(new URL(resourceManagerURL));
@@ -99,11 +110,17 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         }
       }
     } else {
-      _resourceManagerAddress = configuration.get(RESOURCE_MANAGER_ADDRESS);
+     // _resourceManagerAddress = configuration.get(RESOURCE_MANAGER_ADDRESS);
+     if (resourceManagerHttpPolicy.equals("HTTPS_ONLY")){
+      _resourceManagerAddress = "https://" + configuration.get(RESOURCE_MANAGER_HTTPS_ADDRESS);
+     } else {
+       _resourceManagerAddress = "http://" + configuration.get(RESOURCE_MANAGER_HTTP_ADDRESS);
+     } 
     }
     if (_resourceManagerAddress == null) {
       throw new RuntimeException(
-              "Cannot get YARN resource manager address from Hadoop Configuration property: [" + RESOURCE_MANAGER_ADDRESS
+             // "Cannot get YARN resource manager address from Hadoop Configuration property: [" + RESOURCE_MANAGER_ADDRESS
+              "Cannot get YARN resource manager address from Hadoop Configuration property: [" + RESOURCE_MANAGER_HTTP_ADDRESS
                       + "].");
     }
   }
@@ -142,7 +159,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         + ", and current time: " + _currentTime);
 
     // Fetch all succeeded apps
-    URL succeededAppsURL = new URL(new URL("http://" + _resourceManagerAddress), String.format(
+    // URL succeededAppsURL = new URL(new URL("http://" + _resourceManagerAddress), String.format(
+    URL succeededAppsURL = new URL(new URL(_resourceManagerAddress), String.format(
             "/ws/v1/cluster/apps?finalStatus=SUCCEEDED&finishedTimeBegin=%s&finishedTimeEnd=%s",
             String.valueOf(_lastTime + 1), String.valueOf(_currentTime)));
     logger.info("The succeeded apps URL is " + succeededAppsURL);
@@ -152,7 +170,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
     // Fetch all failed apps
     // state: Application Master State
     // finalStatus: Status of the Application as reported by the Application Master
-    URL failedAppsURL = new URL(new URL("http://" + _resourceManagerAddress), String.format(
+    // URL failedAppsURL = new URL(new URL("http://" + _resourceManagerAddress), String.format(
+    URL failedAppsURL = new URL(new URL(_resourceManagerAddress), String.format(
         "/ws/v1/cluster/apps?finalStatus=FAILED&state=FINISHED&finishedTimeBegin=%s&finishedTimeEnd=%s",
         String.valueOf(_lastTime + 1), String.valueOf(_currentTime)));
     List<AnalyticJob> failedApps = readApps(failedAppsURL);
